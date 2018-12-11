@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import sys
+import time
 import wave
 
 from PyQt5 import QtWidgets
@@ -22,7 +23,6 @@ class MainWindow(QMainWindow):
         wav = wave.open(self.wav_path)
         params = wav.getparams()
         self.duration = params.nframes / params.framerate
-        print('duration =', self.duration)
 
         start = 0
         end = params.nframes
@@ -42,10 +42,12 @@ class MainWindow(QMainWindow):
         fmt.setSampleType(QAudioFormat.SignedInt)
 
         self.output = QAudioOutput(fmt, self)
+        self.output.stateChanged.connect(self.state_checkpoint)
         self.output.setNotifyInterval(20)
         self.output.notify.connect(self.notified)
+        self.play_button.clicked.connect(self.play_pause)
 
-        self.play()
+        self.loop_enabled = False
 
     def _setLayout(self):
         widget = QtWidgets.QWidget()
@@ -56,8 +58,7 @@ class MainWindow(QMainWindow):
         self.progressBar.setValue(0)
         self.progressBar.setTextVisible(True)
 
-        self.play_button = QtWidgets.QPushButton('Play', widget)
-        self.play_button.clicked.connect(self.play)
+        self.play_button = QtWidgets.QPushButton('Play | Stop', widget)
 
         grid.addWidget(self.progressBar, 0, 0, 1, 3)
         grid.addWidget(self.play_button, 1, 1)
@@ -88,10 +89,47 @@ class MainWindow(QMainWindow):
             # Load from file
             self.buffer.open(QIODevice.ReadOnly)
         self.output.start(self.buffer)
+        self.t_paused = 0
+        self.t0_paused = time.time()
+
+    def play_pause(self):
+        """
+        Play or pause based on audio output state.
+        """
+        state = self.output.state()
+        if state == QAudio.ActiveState:  # playing
+            # pause playback
+            self.output.suspend()
+            self.t0_paused = time.time()
+        elif state == QAudio.SuspendedState:  # paused
+            # resume playback
+            self.output.resume()
+            self.t_paused += time.time() - self.t0_paused
+        elif state == QAudio.StoppedState or state == QAudio.IdleState:
+            self.play()
+
+    def stop(self):
+        """
+        Stop playback.
+        """
+        state = self.output.state()
+        if state != QAudio.StoppedState:
+            self.output.stop()
+            if sys.platform == 'darwin':
+                self.buffer.close()
+
+    def state_checkpoint(self):
+        """
+        React to AudioOutput state change.
+        Loop if enabled.
+        """
+        # Loop implementation
+        if self.output.state() == QAudio.IdleState and self.loop_enabled:
+            self.play()
 
     def notified(self):
         tus = self.output.elapsedUSecs()
-        ts = tus / 1000000  #- self.t_paused
+        ts = tus / 1000000 - self.t_paused
         self.statusBar().showMessage('{:.3f}'.format(ts))
         self.progressBar.setValue(ts * 100 / self.duration)
 
@@ -103,4 +141,3 @@ app = QApplication(sys.argv)
 main = MainWindow(wav_path)
 main.show()
 sys.exit(app.exec_())
-
