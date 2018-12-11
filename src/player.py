@@ -1,13 +1,19 @@
 #!/usr/bin/python
 
+# Standard Library
 import sys
 import time
 import wave
 
+# 3rd party
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import QBuffer, QIODevice
-from PyQt5.QtMultimedia import QAudio, QAudioFormat, QAudioOutput
-from PyQt5.QtWidgets import QApplication, QMainWindow
+from PyQt5.QtCore import QBuffer
+from PyQt5.QtCore import QIODevice
+from PyQt5.QtMultimedia import QAudio
+from PyQt5.QtMultimedia import QAudioFormat
+from PyQt5.QtMultimedia import QAudioOutput
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QMainWindow
 
 
 class MainWindow(QMainWindow):
