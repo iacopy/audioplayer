@@ -109,8 +109,6 @@ class MainWindow(QMainWindow):
             # Load from file
             self.buffer.open(QIODevice.ReadOnly)
         self.output.start(self.buffer)
-        self.t_paused = 0
-        self.t0_paused = time.time()
 
     def play_pause(self):
         """
@@ -120,11 +118,9 @@ class MainWindow(QMainWindow):
         if state == QAudio.ActiveState:  # playing
             # pause playback
             self.output.suspend()
-            self.t0_paused = time.time()
         elif state == QAudio.SuspendedState:  # paused
             # resume playback
             self.output.resume()
-            self.t_paused += time.time() - self.t0_paused
         elif state == QAudio.StoppedState or state == QAudio.IdleState:
             self.play()
 
@@ -148,8 +144,7 @@ class MainWindow(QMainWindow):
             self.play()
 
     def notified(self):
-        tus = self.output.elapsedUSecs()
-        ts = tus / 1000000 - self.t_paused
+        ts = self.output.processedUSecs() /1000000 + self.t_start
         self.statusBar().showMessage('{:.3f}'.format(ts))
         self.progressBar.setValue(ts * 100 / self.duration)
 
@@ -157,12 +152,14 @@ class MainWindow(QMainWindow):
         """
         Put the playback start position to `position`.
         """
-        # FIXME: progress bar is broken when changing region
         wav = wave.open(self.wav_path)
         wav.setpos(position)
         self.buffer.seek(0)
         self.buffer.writeData(wav.readframes(self.reg_nframes))
         wav.close()
+
+        self.t_start = position / self.params.framerate
+        self.progressBar.setValue(self.t_start * 100 / self.duration)
 
     def set_random_region(self):
         """
