@@ -140,8 +140,19 @@ class MainWindow(QMainWindow):
         Loop if enabled.
         """
         # Loop implementation
-        if self.output.state() == QAudio.IdleState and self.loop_enabled:
-            self.play()
+        state = self.output.state()
+        if state == QAudio.ActiveState:
+            print(state, '== Active')
+        elif state == QAudio.SuspendedState:
+            print(state, '== Suspended')
+        elif state == QAudio.IdleState:
+            print(state, '== Idle')
+            if self.loop_enabled:
+                self.play()
+            else:
+                self.stop()
+        elif state == QAudio.StoppedState:
+            print(state, '== Stopped')
 
     def notified(self):
         ts = self.output.processedUSecs() /1000000 + self.t_start
