@@ -4,6 +4,7 @@ Play audio regions of a wav file.
 """
 
 # Standard Library
+from datetime import timedelta
 import random
 import sys
 import time
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('MainWindow')
 
         self._setLayout()
+        self.status_bar = self.statusBar()
 
         self.wav_path = wav_path
         self.params = read_wav_info(wav_path)
@@ -155,9 +157,9 @@ class MainWindow(QMainWindow):
             print(state, '== Stopped')
 
     def notified(self):
-        ts = self.output.processedUSecs() /1000000 + self.t_start
-        self.statusBar().showMessage('{:.3f}'.format(ts))
-        self.progressBar.setValue(ts * 100 / self.duration)
+        playing_time = self.output.processedUSecs() /1000000 + self.start_time
+        self.progressBar.setValue(playing_time * 100 / self.duration)
+        self.status_bar.showMessage(str(timedelta(seconds=playing_time))[:-3])
 
     def set_region(self, position):
         """
@@ -169,8 +171,9 @@ class MainWindow(QMainWindow):
         self.buffer.writeData(wav.readframes(self.reg_nframes))
         wav.close()
 
-        self.t_start = position / self.params.framerate
-        self.progressBar.setValue(self.t_start * 100 / self.duration)
+        self.start_time = position / self.params.framerate
+        self.progressBar.setValue(self.start_time * 100 / self.duration)
+        self.status_bar.showMessage(str(timedelta(seconds=self.start_time))[:-3])
 
     def set_random_region(self):
         """
