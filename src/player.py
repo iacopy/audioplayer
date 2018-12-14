@@ -4,48 +4,23 @@ Play audio regions of a wav file.
 """
 
 # Standard Library
-from datetime import timedelta
 import random
-import re
 import sys
-import time
 import wave
+from datetime import timedelta
 
 # 3rd party
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QBuffer
 from PyQt5.QtCore import QIODevice
 from PyQt5.QtMultimedia import QAudio
-from PyQt5.QtMultimedia import QAudioFormat
-from PyQt5.QtMultimedia import QAudioOutput
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QMainWindow
 
+# My stuff
+import utils
 
 REG_SECONDS = 2
-
-
-def get_audio_output(params):
-    """
-    Create and return a QAudioOutput from wav params.
-    """
-    enc = 'audio/pcm'
-    fmt = QAudioFormat()
-    fmt.setChannelCount(params.nchannels)
-    fmt.setSampleRate(params.framerate)
-    fmt.setSampleSize(params.sampwidth * 8)
-    fmt.setCodec(enc)
-    fmt.setByteOrder(QAudioFormat.LittleEndian)
-    fmt.setSampleType(QAudioFormat.SignedInt)
-    return QAudioOutput(fmt)
-
-
-def read_wav_info(wav_path):
-    """
-    Read a wav file and return audio parameters
-    """
-    with wave.open(wav_path) as wav:
-        return wav.getparams()
 
 
 class MainWindow(QMainWindow):
@@ -58,10 +33,10 @@ class MainWindow(QMainWindow):
         self.status_bar = self.statusBar()
 
         self.wav_path = wav_path
-        self.params = read_wav_info(wav_path)
+        self.params = utils.read_wav_info(wav_path)
         self.duration = self.params.nframes / self.params.framerate
 
-        self.output = get_audio_output(self.params)
+        self.output = utils.get_audio_output(self.params)
         self.output.stateChanged.connect(self.state_checkpoint)
         self.output.setNotifyInterval(20)
 
@@ -79,7 +54,7 @@ class MainWindow(QMainWindow):
 
         self.region = None
         self.set_region((0, REG_SECONDS * self.params.framerate))
-        #self.set_random_region()
+        # self.set_random_region()
 
     def _setLayout(self):
         widget = QtWidgets.QWidget()
@@ -173,7 +148,7 @@ class MainWindow(QMainWindow):
 
     def notified(self):
         start_time = self.region[0] / self.params.framerate
-        playing_time = self.output.processedUSecs() /1000000 + start_time
+        playing_time = self.output.processedUSecs() / 1000000 + start_time
         self.progressBar.setValue(playing_time * 100 / self.duration)
         self.status_bar.showMessage(str(timedelta(seconds=playing_time))[:-3])
 
@@ -202,7 +177,7 @@ class MainWindow(QMainWindow):
         start_time = position / self.params.framerate
         self.progressBar.setValue(start_time * 100 / self.duration)
         self.status_bar.showMessage(str(timedelta(seconds=start_time))[:-3])
-    
+
     @property
     def reg_nframes(self):
         return self.region[1] - self.region[0]
@@ -233,17 +208,9 @@ class MainWindow(QMainWindow):
         "l-0.5" ==> move start position 0.5 s before
         "r1"    ==> move stop position 1 seconds after
         """
-        def parse_command(command):
-            res = re.findall(r'([lr])(-?)(.+)', command)[0]
-            left_right, sign, amount = res
-            amount = float(amount)
-            if sign == '-':
-                amount = amount * -1
-            print(left_right, amount)
-            return left_right, amount
         command = self.command_edit.text()
         try:
-            lr, delta = parse_command(command)
+            lr, delta = utils.parse_command(command)
         except (IndexError, ValueError) as err:
             print(err)
             return
@@ -255,7 +222,7 @@ class MainWindow(QMainWindow):
         elif lr == 'r':
             end = int(end + delta * self.params.framerate)
             print('New end: {}'.format(timedelta(seconds=(end / self.params.framerate))))
-        
+
         self.set_region((start, end))
         self.command_edit.setText('')
 
@@ -264,9 +231,9 @@ class MainWindow(QMainWindow):
 
 
 # cli args
-wav_path = sys.argv[1] if sys.argv[1:] else 'wav/nice-work.wav'
+WAV_PATH = sys.argv[1] if sys.argv[1:] else 'wav/nice-work.wav'
 
 app = QApplication(sys.argv)
-main = MainWindow(wav_path)
+main = MainWindow(WAV_PATH)
 main.show()
 sys.exit(app.exec_())
