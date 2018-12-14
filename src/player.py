@@ -66,6 +66,8 @@ class MainWindow(QMainWindow):
         self.output.setNotifyInterval(20)
 
         self.output.notify.connect(self.notified)
+
+        self.loop_button.clicked.connect(self.switch_loop)
         self.play_button.clicked.connect(self.play_pause)
         self.random_button.clicked.connect(self.set_random_region)
 
@@ -83,10 +85,13 @@ class MainWindow(QMainWindow):
         self.progressBar.setValue(0)
         self.progressBar.setTextVisible(True)
 
+        self.loop_button = QtWidgets.QPushButton('Loop', widget)
+        self.loop_button.setCheckable(True)
         self.play_button = QtWidgets.QPushButton('Play | Stop', widget)
         self.random_button = QtWidgets.QPushButton('Random', widget)
 
         grid.addWidget(self.progressBar, 0, 0, 1, 3)
+        grid.addWidget(self.loop_button, 1, 0)
         grid.addWidget(self.play_button, 1, 1)
         grid.addWidget(self.random_button, 1, 2)
 
@@ -135,6 +140,9 @@ class MainWindow(QMainWindow):
             self.output.stop()
             if sys.platform == 'darwin':
                 self.buffer.close()
+
+    def switch_loop(self):
+        self.loop_enabled = not self.loop_enabled
 
     def state_checkpoint(self):
         """
