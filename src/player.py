@@ -6,6 +6,7 @@ Play audio regions of a wav file.
 # Standard Library
 from datetime import timedelta
 import random
+import re
 import sys
 import time
 import wave
@@ -58,7 +59,6 @@ class MainWindow(QMainWindow):
 
         self.wav_path = wav_path
         self.params = read_wav_info(wav_path)
-        self.reg_nframes = int(self.params.framerate * REG_SECONDS)
         self.duration = self.params.nframes / self.params.framerate
 
         self.output = get_audio_output(self.params)
@@ -71,10 +71,15 @@ class MainWindow(QMainWindow):
         self.play_button.clicked.connect(self.play_pause)
         self.random_button.clicked.connect(self.set_random_region)
 
+        self.command_edit.returnPressed.connect(self.command_entered)
+
         self.loop_enabled = False
 
         self.buffer = QBuffer()
-        self.set_random_region()
+
+        self.region = None
+        self.set_region((0, REG_SECONDS * self.params.framerate))
+        #self.set_random_region()
 
     def _setLayout(self):
         widget = QtWidgets.QWidget()
@@ -89,11 +94,13 @@ class MainWindow(QMainWindow):
         self.loop_button.setCheckable(True)
         self.play_button = QtWidgets.QPushButton('Play | Stop', widget)
         self.random_button = QtWidgets.QPushButton('Random', widget)
+        self.command_edit = QtWidgets.QLineEdit('')
 
         grid.addWidget(self.progressBar, 0, 0, 1, 3)
         grid.addWidget(self.loop_button, 1, 0)
         grid.addWidget(self.play_button, 1, 1)
         grid.addWidget(self.random_button, 1, 2)
+        grid.addWidget(self.command_edit, 2, 1)
 
         widget.setLayout(grid)
         self.setCentralWidget(widget)
@@ -165,23 +172,40 @@ class MainWindow(QMainWindow):
             print(state, '== Stopped')
 
     def notified(self):
-        playing_time = self.output.processedUSecs() /1000000 + self.start_time
+        start_time = self.region[0] / self.params.framerate
+        playing_time = self.output.processedUSecs() /1000000 + start_time
         self.progressBar.setValue(playing_time * 100 / self.duration)
         self.status_bar.showMessage(str(timedelta(seconds=playing_time))[:-3])
 
-    def set_region(self, position):
+    def set_region(self, region):
         """
         Put the playback start position to `position`.
         """
+        # avoid segfault if changing region during playback
+        self.stop()
+
+        position, end = region
+        position = max(0, min(position, end))  # don't start before 0
+        end = min(self.params.nframes, end)  # don't set end after days!
+        self.region = position, end
+        print('set_region -> {:,}-{:,}'.format(*self.region))
+        print('region times: {}-{} (duration={})'.format(*self.region_timedeltas()))
+        frame_to_read = end - position
+
         wav = wave.open(self.wav_path)
         wav.setpos(position)
-        self.buffer.seek(0)
-        self.buffer.writeData(wav.readframes(self.reg_nframes))
+        # we need to reinit buffer since the region could be shorter than before
+        self.buffer = QBuffer()
+        self.buffer.writeData(wav.readframes(frame_to_read))
         wav.close()
 
-        self.start_time = position / self.params.framerate
-        self.progressBar.setValue(self.start_time * 100 / self.duration)
-        self.status_bar.showMessage(str(timedelta(seconds=self.start_time))[:-3])
+        start_time = position / self.params.framerate
+        self.progressBar.setValue(start_time * 100 / self.duration)
+        self.status_bar.showMessage(str(timedelta(seconds=start_time))[:-3])
+    
+    @property
+    def reg_nframes(self):
+        return self.region[1] - self.region[0]
 
     def set_random_region(self):
         """
@@ -192,7 +216,51 @@ class MainWindow(QMainWindow):
         print('Random region: {:.2f}-{:.2f}'.format(
             position / self.params.framerate, end / self.params.framerate)
         )
-        self.set_region(position)
+        self.set_region((position, end))
+
+    def region_timedeltas(self):
+        """Return start, end and duration timedeltas"""
+        start, end = self.region
+        start_timedelta = timedelta(seconds=start / self.params.framerate)
+        end_timedelta = timedelta(seconds=end / self.params.framerate)
+        return start_timedelta, end_timedelta, (end_timedelta - start_timedelta)
+
+    def command_entered(self):
+        """
+        Change region boundaries with Blender-like syntax.
+
+        Examples:
+        "l-0.5" ==> move start position 0.5 s before
+        "r1"    ==> move stop position 1 seconds after
+        """
+        def parse_command(command):
+            res = re.findall(r'([lr])(-?)(.+)', command)[0]
+            left_right, sign, amount = res
+            amount = float(amount)
+            if sign == '-':
+                amount = amount * -1
+            print(left_right, amount)
+            return left_right, amount
+        command = self.command_edit.text()
+        try:
+            lr, delta = parse_command(command)
+        except (IndexError, ValueError) as err:
+            print(err)
+            return
+
+        start, end = self.region
+        if lr == 'l':
+            start = int(start + delta * self.params.framerate)
+            print('New start: {}'.format(timedelta(seconds=(start / self.params.framerate))))
+        elif lr == 'r':
+            end = int(end + delta * self.params.framerate)
+            print('New end: {}'.format(timedelta(seconds=(end / self.params.framerate))))
+        
+        self.set_region((start, end))
+        self.command_edit.setText('')
+
+        # feature: restart immediately after command is entered
+        self.play()
 
 
 # cli args
