@@ -45,6 +45,7 @@ class MainWindow(QMainWindow):
         self.loop_button.clicked.connect(self.switch_loop)
         self.play_button.clicked.connect(self.play_pause)
         self.random_button.clicked.connect(self.set_random_region)
+        self.export_button.clicked.connect(self.export_region)
 
         self.command_edit.returnPressed.connect(self.command_entered)
 
@@ -70,12 +71,14 @@ class MainWindow(QMainWindow):
         self.play_button = QtWidgets.QPushButton('Play | Stop', widget)
         self.random_button = QtWidgets.QPushButton('Random', widget)
         self.command_edit = QtWidgets.QLineEdit('')
+        self.export_button = QtWidgets.QPushButton('Export', widget)
 
         grid.addWidget(self.progressBar, 0, 0, 1, 3)
         grid.addWidget(self.loop_button, 1, 0)
         grid.addWidget(self.play_button, 1, 1)
         grid.addWidget(self.random_button, 1, 2)
         grid.addWidget(self.command_edit, 2, 1)
+        grid.addWidget(self.export_button, 2, 2)
 
         widget.setLayout(grid)
         self.setCentralWidget(widget)
@@ -186,7 +189,12 @@ class MainWindow(QMainWindow):
         """
         Choose a random position and set playback start from there.
         """
-        position = random.randrange(self.params.nframes - self.reg_nframes)
+        try:
+            position = random.randrange(self.params.nframes - self.reg_nframes)
+        except ValueError:
+            print('Cannot move position randomly. Please shorten the region.')
+            position = 0
+
         end = position + self.reg_nframes
         print('Random region: {:.2f}-{:.2f}'.format(
             position / self.params.framerate, end / self.params.framerate)
@@ -228,6 +236,17 @@ class MainWindow(QMainWindow):
 
         # feature: restart immediately after command is entered
         self.play()
+
+    def export_region(self):
+        """
+        Export the current region.
+        """
+        start, stop = self.region
+        wav_filepath = self.wav_path[:-4] + '[{}-{}].wav'.format(start, stop)
+        with wave.open(wav_filepath, 'wb') as wave_write:
+            wave_write.setparams(self.params)
+            wave_write.writeframes(self.buffer.data())
+        print(wav_filepath, 'created')
 
 
 # cli args
